@@ -134,6 +134,7 @@ typedef enum {
   ND_SUB, // -
   ND_MUL, // *
   ND_DIV, // /
+  ND_POW, // ^
   ND_NUM, // Integer
 } NodeKind;
 
@@ -167,8 +168,10 @@ static Node *new_num(int val) {
 
 static Node *expr(Token **rest, Token *tok);
 static Node *mul(Token **rest, Token *tok);
+static Node *pow_expr(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 
+// lowest precedence, left associative
 // expr = mul ("+" mul | "-" mul)*
 static Node *expr(Token **rest, Token *tok) {
   Node *node = mul(&tok, tok);
@@ -189,18 +192,19 @@ static Node *expr(Token **rest, Token *tok) {
   }
 }
 
-// mul = primary ("*" primary | "/" primary)*
+// mul = pow ("*" pow | "/" pow)*
+// left associative`(...)*`, using iteration
 static Node *mul(Token **rest, Token *tok) {
-  Node *node = primary(&tok, tok);
+  Node *node = pow_expr(&tok, tok);
 
   for (;;) {
     if (equal(tok, "*")) {
-      node = new_binary(ND_MUL, node, primary(&tok, tok->next));
+      node = new_binary(ND_MUL, node, pow_expr(&tok, tok->next));
       continue;
     }
 
     if (equal(tok, "/")) {
-      node = new_binary(ND_DIV, node, primary(&tok, tok->next));
+      node = new_binary(ND_DIV, node, pow_expr(&tok, tok->next));
       continue;
     }
 
@@ -209,6 +213,18 @@ static Node *mul(Token **rest, Token *tok) {
   }
 }
 
+// right associative`(...)?`, using recursive
+// pow = primary ( "^" pow )?
+static Node *pow_expr(Token **rest, Token *tok) {
+    Node *node = primary(&tok, tok);
+    if (equal(tok, "^")) {
+        node = new_binary(ND_POW, node, pow_expr(&tok, tok->next));
+    }
+    *rest = tok;
+    return node;
+}
+
+// heightest precedence
 // primary = "(" expr ")" | num
 static Node *primary(Token **rest, Token *tok) {
   if (equal(tok, "(")) {
@@ -242,6 +258,8 @@ static void pop(char *arg) {
   depth--;
 }
 
+
+
 static void gen_expr(Node *node) {
   if (node->kind == ND_NUM) {
     printf("  mov $%d, %%rax\n", node->val);
@@ -272,6 +290,55 @@ static void gen_expr(Node *node) {
   error("invalid expression");
 }
 
+static void print_tree(Node *node, int indent) {
+  if (node == NULL) {
+    printf("%*sNULL\n", indent * 2, "");
+    return;
+  }
+
+  // Print node type
+  switch (node->kind) {
+  case ND_ADD:
+    printf("(ADD");
+    break;
+  case ND_SUB:
+    printf("(SUB");
+    break;
+  case ND_MUL:
+    printf("(MUL");
+    break;
+  case ND_DIV:
+    printf("(DIV");
+    break;
+  case ND_POW:
+    printf("(POW");
+    break;
+  case ND_NUM:
+    printf(" %d", node->val);
+    return; // Leaf node, no children
+  default:
+    abort();
+    return;
+  }
+
+  // Print left child
+  if (node->lhs) {
+    print_tree(node->lhs, indent + 2);
+  } else {
+      abort();
+  }
+
+  // Print right child
+  if (node->rhs) {
+    print_tree(node->rhs, indent + 2);
+  } else {
+      abort();
+  }
+
+  printf(")");
+}
+
+
 int main(int argc, char **argv) {
   if (argc != 2)
     error("%s: invalid number of arguments", argv[0]);
@@ -288,8 +355,9 @@ int main(int argc, char **argv) {
   printf("main:\n");
 
   // Traverse the AST to emit assembly.
-  gen_expr(node);
-  printf("  ret\n");
+  // gen_expr(node);
+  print_tree(node, 0);
+  printf("\nret\n");
 
   assert(depth == 0);
   return 0;
