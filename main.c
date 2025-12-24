@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 //
 // Tokenizer
@@ -338,6 +339,26 @@ static void print_tree(Node *node, int indent) {
   printf(")");
 }
 
+static int eval(Node *node) {
+    switch (node->kind) {
+        case ND_NUM:
+            return node->val;
+        case ND_ADD:
+            return eval(node->lhs) + eval(node->rhs);
+        case ND_SUB:
+            return eval(node->lhs) - eval(node->rhs);
+        case ND_MUL:
+            return eval(node->lhs) * eval(node->rhs);
+        case ND_DIV:
+            return eval(node->lhs) / eval(node->rhs);
+        case ND_POW:
+            return pow(eval(node->lhs), eval(node->rhs));
+        default:
+            error("invalid node kind");
+    }
+}
+
+
 
 int main(int argc, char **argv) {
   if (argc != 2)
@@ -351,13 +372,12 @@ int main(int argc, char **argv) {
   if (tok->kind != TK_EOF)
     error_tok(tok, "extra token");
 
-  printf("  .globl main\n");
-  printf("main:\n");
 
   // Traverse the AST to emit assembly.
   // gen_expr(node);
+  printf("expr: ");
   print_tree(node, 0);
-  printf("\nret\n");
+  printf("\nresult: %d\n", eval(node));
 
   assert(depth == 0);
   return 0;
